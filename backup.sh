@@ -1,71 +1,98 @@
 #!/bin/bash
-# Function to stop Docker services if SERVICES_TO_STOP is set
-stop_docker_services() {
-  if [ -n "$SERVICES_TO_STOP" ]; then
-    echo "Stopping Docker services: $SERVICES_TO_STOP"
-    IFS=',' read -ra SERVICES <<<"$SERVICES_TO_STOP"
-    for service in "${SERVICES[@]}"; do
-      echo "Stopping $service"
-      docker stop "$service"
-    done
-  fi
-}
-
-# Function to start Docker services if SERVICES_TO_STOP is set
-start_docker_services() {
-  if [ -n "$SERVICES_TO_STOP" ]; then
-    echo "Starting Docker services: $SERVICES_TO_STOP"
-    IFS=',' read -ra SERVICES <<<"$SERVICES_TO_STOP"
-    for service in "${SERVICES[@]}"; do
-      echo "Starting $service"
-      docker start "$service"
-    done
-  fi
-}
+# CD to the directory of the script
+cd "$(dirname "$0")" || exit
+source ./.env
+set -e
 cleanup() {
   echo "Cleaning up"
-  start_docker_services
-
+  # Run post-backup command if defined
+  if [[ -n "$POST_RUN" ]]; then
+    echo "Running post-backup command: $POST_RUN"
+    eval "$POST_RUN"
+  fi
+  cd -
 }
-
-source ./.env
 
 # Run cleanup function on EXIT
 trap cleanup EXIT
-# CD to the directory of the script
 
-cd "$(dirname "$0")" || exit
-
-discord_url="$(cat ./discord-url.txt)"
+# Run pre-backup command if defined
+if [[ -n "$PRE_RUN" ]]; then
+  echo "Running pre-backup command: $PRE_RUN"
+  eval "$PRE_RUN"
+fi
 
 # Define a function to send a message
 send_discord_notification() {
   local message=$1
+  local is_status=${2:-false}
 
-  # Construct payload using jq for proper JSON escaping
-  local payload=$(jq -n --arg content "$message" '{"content": $content}')
+  if [ "$is_status" == "true" ]; then
+    # Format backup results as a Discord embed with proper formatting
+    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    # Extract key metrics from the output using grep and sed
+    local remote_files=$(echo "$message" | grep "Remote files:" | sed 's/Remote files: //')
+    local remote_size=$(echo "$message" | grep "Remote size:" | sed 's/Remote size: //')
+    local files_added=$(echo "$message" | grep "Files added:" | sed 's/Files added: //')
+    local files_deleted=$(echo "$message" | grep "Files deleted:" | sed 's/Files deleted: //')
+    local files_changed=$(echo "$message" | grep "Files changed:" | sed 's/Files changed: //')
+    local data_uploaded=$(echo "$message" | grep "Data uploaded:" | sed 's/Data uploaded: //')
+    local data_downloaded=$(echo "$message" | grep "Data downloaded:" | sed 's/Data downloaded: //')
+
+    # Construct a prettier payload with Discord embeds
+    local payload=$(jq -n \
+      --arg title "Backup Complete: $BACKUP_NAME" \
+      --arg color "3066993" \
+      --arg timestamp "$timestamp" \
+      --arg files_added "$files_added" \
+      --arg files_deleted "$files_deleted" \
+      --arg files_changed "$files_changed" \
+      --arg remote_files "$remote_files" \
+      --arg remote_size "$remote_size" \
+      --arg data_uploaded "$data_uploaded" \
+      --arg data_downloaded "$data_downloaded" \
+      '{
+        "embeds": [{
+          "title": $title,
+          "color": $color|tonumber,
+          "timestamp": $timestamp,
+          "fields": [
+            {"name": "📊 Stats", "value": ""},
+            {"name": "Remote Files", "value": $remote_files, "inline": true},
+            {"name": "Remote Size", "value": $remote_size, "inline": true},
+            {"name": "📝 Changes", "value": ""},
+            {"name": "Files Added", "value": $files_added, "inline": true},
+            {"name": "Files Deleted", "value": $files_deleted, "inline": true},
+            {"name": "Files Changed", "value": $files_changed, "inline": true},
+            {"name": "📤 Transfer", "value": ""},
+            {"name": "Data Uploaded", "value": $data_uploaded, "inline": true},
+            {"name": "Data Downloaded", "value": $data_downloaded, "inline": true}
+          ]
+        }]
+      }')
+  else
+    # For regular messages, use a simpler format
+    local payload=$(jq -n \
+      --arg content "🔄 **$BACKUP_NAME**: $message" \
+      '{"content": $content}')
+  fi
 
   # Send POST request to Discord Webhook
-  curl -H "Content-Type: application/json" -X POST -d "$payload" $discord_url
+  curl -s -H "Content-Type: application/json" -X POST -d "$payload" $DISCORD_URL
 }
-
 send_discord_notification "Starting $BACKUP_NAME backup"
 
-systemctl stop jellyfin
-
-URL="$(cat ./backup-url.txt)"
-DUPLICATI_PASSPHRASE="$(cat ./duplicati-passphrase.txt)"
-
-output=$(duplicati-cli backup "$URL" \
+output=$(duplicati-cli backup "$DUPLICATI_URL" \
   $(
     IFS=','
     read -ra BACKUP_PATHS <<<"$PATHS_TO_BACKUP"
-    for path in "${BACKUP_PATHS[@]}"; do echo -n "\"$path\" "; done
+    for path in "${BACKUP_PATHS[@]}"; do echo -n "$path "; done
   ) \
-  -- dblock-size=50mb \
+  --dblock-size=50mb \
   --backup-name="$BACKUP_NAME" \
   --passphrase="$DUPLICATI_PASSPHRASE" \
   --retention-policy="1W:1D,4W:1W,12M:1M" | tee /dev/tty | tail -n 10)
 
 echo "Done: $output"
-send_discord_notification "$output"
+send_discord_notification "$output" true
