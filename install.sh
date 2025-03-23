@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION=2.1.0.3_beta_2025-01-22
+BASE_URL="https://github.com/duplicati/duplicati/releases/download/v2.1.0.5_stable_2025-03-04/duplicati-2.1.0.5_stable_2025-03-04"
 
 cleanup() {
   rm -f duplicati-*.deb duplicati-*.rpm
@@ -28,13 +28,13 @@ echo "Detected OS: $OS"
 if [ "$OS" == "amzn" ] || [ "$OS" == "rhel" ] || [ "$OS" == "centos" ] || [ "$OS" == "fedora" ]; then
     # For Amazon Linux and other RPM-based systems
     echo "Installing for Amazon Linux / RPM-based system"
-    wget https://updates.duplicati.com/beta/duplicati-$VERSION-linux-x64-gui.rpm
+    wget "$BASE_URL-linux-x64-cli.rpm"
     sudo yum -y install mono-core
     sudo rpm -ivh duplicati-*.rpm
 else
     # Default to Debian-based installation
     echo "Installing for Debian-based system"
-    wget https://updates.duplicati.com/beta/duplicati-$VERSION-linux-x64-gui.deb
+    wget "$BASE_URL-linux-x64-cli.deb"
     sudo apt-get update
     sudo apt-get -y install mono-runtime
     sudo dpkg -i duplicati-*.deb
