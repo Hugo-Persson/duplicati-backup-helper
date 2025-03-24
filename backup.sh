@@ -81,7 +81,7 @@ send_discord_notification() {
   # Send POST request to Discord Webhook
   curl -s -H "Content-Type: application/json" -X POST -d "$payload" $DISCORD_URL
 }
-function send_start_notification():{
+function send_start_notification(){
 
 # Create a formatted list of directories to backup
 local formatted_directories=$(echo "$PATHS_TO_BACKUP" | tr ' ' '\n' | grep -v '^-' | awk '{print "• " $0}' | paste -sd '\n' -)
