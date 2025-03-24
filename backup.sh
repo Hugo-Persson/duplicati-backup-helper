@@ -81,8 +81,10 @@ send_discord_notification() {
   # Send POST request to Discord Webhook
   curl -s -H "Content-Type: application/json" -X POST -d "$payload" $DISCORD_URL
 }
+function send_start_notification():{
+
 # Create a formatted list of directories to backup
-formatted_directories=$(echo "$PATHS_TO_BACKUP" | tr ' ' '\n' | grep -v '^-' | awk '{print "• " $0}' | paste -sd '\n' -)
+local formatted_directories=$(echo "$PATHS_TO_BACKUP" | tr ' ' '\n' | grep -v '^-' | awk '{print "• " $0}' | paste -sd '\n' -)
 
 # Create a start backup embed message
 local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -105,6 +107,10 @@ backup_payload=$(jq -n \
 
 # Send the notification using the raw payload
 curl -s -H "Content-Type: application/json" -X POST -d "$backup_payload" $DISCORD_URL
+}
+
+send_start_notification
+
 
 
 output=$(duplicati-cli backup "$DUPLICATI_URL" \
