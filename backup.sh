@@ -83,13 +83,31 @@ send_discord_notification() {
 }
 # Create a formatted list of directories to backup
 formatted_directories=$(echo "$PATHS_TO_BACKUP" | tr ' ' '\n' | grep -v '^-' | awk '{print "• " $0}' | paste -sd '\n' -)
-backup_message="Starting $BACKUP_NAME backup\nDirectories to backup:\n$formatted_directories"
 
-send_discord_notification "$backup_message"
+# Create a start backup embed message
+local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+backup_payload=$(jq -n \
+  --arg title "Backup Started: $BACKUP_NAME" \
+  --arg color "16750848" \
+  --arg timestamp "$timestamp" \
+  --arg directories "$formatted_directories" \
+  '{
+    "embeds": [{
+      "title": $title,
+      "color": $color|tonumber,
+      "timestamp": $timestamp,
+      "fields": [
+        {"name": "📂 Directories", "value": $directories},
+        {"name": "Status", "value": "⏳ Backup in progress..."}
+      ]
+    }]
+  }')
+
+# Send the notification using the raw payload
+curl -s -H "Content-Type: application/json" -X POST -d "$backup_payload" $DISCORD_URL
+
+
 output=$(duplicati-cli backup "$DUPLICATI_URL" \
-backup_message="Starting $BACKUP_NAME backup\nDirectories to backup:\n$formatted_directories"
-
-send_discord_notification "$backup_message"
   $PATHS_TO_BACKUP \
   --dblock-size=50mb \
   --backup-name="$BACKUP_NAME" \
