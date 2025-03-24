@@ -81,14 +81,16 @@ send_discord_notification() {
   # Send POST request to Discord Webhook
   curl -s -H "Content-Type: application/json" -X POST -d "$payload" $DISCORD_URL
 }
-send_discord_notification "Starting $BACKUP_NAME backup"
+# Create a formatted list of directories to backup
+formatted_directories=$(echo "$PATHS_TO_BACKUP" | tr ' ' '\n' | grep -v '^-' | awk '{print "• " $0}' | paste -sd '\n' -)
+backup_message="Starting $BACKUP_NAME backup\nDirectories to backup:\n$formatted_directories"
 
+send_discord_notification "$backup_message"
 output=$(duplicati-cli backup "$DUPLICATI_URL" \
-  $(
-    IFS=','
-    read -ra BACKUP_PATHS <<<"$PATHS_TO_BACKUP"
-    for path in "${BACKUP_PATHS[@]}"; do echo -n "$path "; done
-  ) \
+backup_message="Starting $BACKUP_NAME backup\nDirectories to backup:\n$formatted_directories"
+
+send_discord_notification "$backup_message"
+  $PATHS_TO_BACKUP \
   --dblock-size=50mb \
   --backup-name="$BACKUP_NAME" \
   --passphrase="$DUPLICATI_PASSPHRASE" \
