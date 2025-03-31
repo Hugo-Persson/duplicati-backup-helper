@@ -3,12 +3,33 @@
 cd "$(dirname "$0")" || exit
 source ./.env
 set -e
+SUCCESS=false
 cleanup() {
   echo "Cleaning up"
   # Run post-backup command if defined
   if [[ -n "$POST_RUN" ]]; then
     echo "Running post-backup command: $POST_RUN"
     eval "$POST_RUN"
+  fi
+  # Send notification if backup failed
+  if [[ "$SUCCESS" == "false" ]]; then
+    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    local error_payload=$(jq -n \
+      --arg title "Backup Failed: $BACKUP_NAME" \
+      --arg color "15158332" \
+      --arg timestamp "$timestamp" \
+      '{
+        "embeds": [{
+          "title": $title,
+          "color": $color|tonumber,
+          "timestamp": $timestamp,
+          "fields": [
+            {"name": "❌ Error", "value": "The backup process did not complete successfully."},
+            {"name": "Status", "value": "Please check the logs for more details."}
+          ]
+        }]
+      }')
+    curl -s -H "Content-Type: application/json" -X POST -d "$error_payload" $DISCORD_URL
   fi
   cd -
 }
@@ -81,19 +102,19 @@ send_discord_notification() {
   # Send POST request to Discord Webhook
   curl -s -H "Content-Type: application/json" -X POST -d "$payload" $DISCORD_URL
 }
-function send_start_notification(){
+function send_start_notification() {
 
-# Create a formatted list of directories to backup
-local formatted_directories=$(echo "$PATHS_TO_BACKUP" | tr ' ' '\n' | grep -v '^-' | awk '{print "• " $0}' | paste -sd '\n' -)
+  # Create a formatted list of directories to backup
+  local formatted_directories=$(echo "$PATHS_TO_BACKUP" | tr ' ' '\n' | grep -v '^-' | awk '{print "• " $0}' | paste -sd '\n' -)
 
-# Create a start backup embed message
-local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-backup_payload=$(jq -n \
-  --arg title "Backup Started: $BACKUP_NAME" \
-  --arg color "16750848" \
-  --arg timestamp "$timestamp" \
-  --arg directories "$formatted_directories" \
-  '{
+  # Create a start backup embed message
+  local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  backup_payload=$(jq -n \
+    --arg title "Backup Started: $BACKUP_NAME" \
+    --arg color "16750848" \
+    --arg timestamp "$timestamp" \
+    --arg directories "$formatted_directories" \
+    '{
     "embeds": [{
       "title": $title,
       "color": $color|tonumber,
@@ -105,13 +126,11 @@ backup_payload=$(jq -n \
     }]
   }')
 
-# Send the notification using the raw payload
-curl -s -H "Content-Type: application/json" -X POST -d "$backup_payload" $DISCORD_URL
+  # Send the notification using the raw payload
+  curl -s -H "Content-Type: application/json" -X POST -d "$backup_payload" $DISCORD_URL
 }
 
 send_start_notification
-
-
 
 output=$(duplicati-cli backup "$DUPLICATI_URL" \
   $PATHS_TO_BACKUP \
@@ -121,4 +140,6 @@ output=$(duplicati-cli backup "$DUPLICATI_URL" \
   --retention-policy="1W:1D,4W:1W,12M:1M" | tee /dev/tty | tail -n 10)
 
 echo "Done: $output"
+SUCCESS=true
 send_discord_notification "$output" true
+
