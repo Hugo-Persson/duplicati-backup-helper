@@ -1,0 +1,4 @@
+.env
+post-backup.sh
+pre-backup.sh
+projects.sh
