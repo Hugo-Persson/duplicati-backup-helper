@@ -30,6 +30,7 @@ cleanup() {
         }]
       }')
     curl -s -H "Content-Type: application/json" -X POST -d "$error_payload" $DISCORD_URL
+    curl "$UPTIME_KUMA_URL?status=down&msg=Backup%20failed"
   fi
   cd -
 }
@@ -142,4 +143,4 @@ output=$(duplicati-cli backup "$DUPLICATI_URL" \
 echo "Done: $output"
 SUCCESS=true
 send_discord_notification "$output" true
-
+curl "$UPTIME_KUMA_URL?status=up&msg=OK"
