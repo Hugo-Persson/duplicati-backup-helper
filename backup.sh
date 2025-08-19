@@ -29,7 +29,9 @@ cleanup() {
           ]
         }]
       }')
-    curl -s -H "Content-Type: application/json" -X POST -d "$error_payload" $DISCORD_URL
+    if [[ "$DISCORD_ENABLED" != "false" ]]; then
+      curl -s -H "Content-Type: application/json" -X POST -d "$error_payload" $DISCORD_URL
+    fi
     curl "$UPTIME_KUMA_URL?status=down&msg=Backup%20failed"
   fi
   cd -
@@ -101,7 +103,9 @@ send_discord_notification() {
   fi
 
   # Send POST request to Discord Webhook
-  curl -s -H "Content-Type: application/json" -X POST -d "$payload" $DISCORD_URL
+  if [[ "$DISCORD_ENABLED" != "false" ]]; then
+    curl -s -H "Content-Type: application/json" -X POST -d "$payload" $DISCORD_URL
+  fi
 }
 function send_start_notification() {
 
@@ -128,7 +132,9 @@ function send_start_notification() {
   }')
 
   # Send the notification using the raw payload
-  curl -s -H "Content-Type: application/json" -X POST -d "$backup_payload" $DISCORD_URL
+  if [[ "$DISCORD_ENABLED" != "false" ]]; then
+    curl -s -H "Content-Type: application/json" -X POST -d "$backup_payload" $DISCORD_URL
+  fi
 }
 
 send_start_notification
